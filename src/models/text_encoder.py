@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+from transformers import AutoModel
 
 
 class TextEncoder(nn.Module):
@@ -30,7 +31,13 @@ class TextEncoder(nn.Module):
             freeze_layers: Number of bottom layers to freeze during training.
         """
         super().__init__()
-        pass
+        self.transformer = AutoModel.from_pretrained(pretrained_model)
+        self.hidden_size = hidden_size
+
+        for i, layer in enumerate(self.transformer.encoder.layer):
+            if i < freeze_layers:
+                for param in layer.parameters():
+                    param.requires_grad = False
 
     def forward(
         self,
@@ -46,4 +53,9 @@ class TextEncoder(nn.Module):
         Returns:
             Encoded representation of shape (batch_size, hidden_size).
         """
-        pass
+        outputs = self.transformer(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        cls_embedding = outputs.last_hidden_state[:, 0, :]
+        return cls_embedding
