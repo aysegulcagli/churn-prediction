@@ -1,6 +1,14 @@
 """Evaluation metrics for churn prediction."""
 
 import numpy as np
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score as sklearn_f1_score,
+    roc_auc_score,
+    average_precision_score,
+)
 
 
 def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -13,7 +21,7 @@ def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns:
         Accuracy score between 0 and 1.
     """
-    pass
+    return float(accuracy_score(y_true, y_pred))
 
 
 def precision(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -26,7 +34,7 @@ def precision(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns:
         Precision score between 0 and 1.
     """
-    pass
+    return float(precision_score(y_true, y_pred, zero_division=0))
 
 
 def recall(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -39,7 +47,7 @@ def recall(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns:
         Recall score between 0 and 1.
     """
-    pass
+    return float(recall_score(y_true, y_pred, zero_division=0))
 
 
 def f1_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -52,7 +60,7 @@ def f1_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     Returns:
         F1 score between 0 and 1.
     """
-    pass
+    return float(sklearn_f1_score(y_true, y_pred, zero_division=0))
 
 
 def roc_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -65,7 +73,7 @@ def roc_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     Returns:
         ROC-AUC score between 0 and 1.
     """
-    pass
+    return float(roc_auc_score(y_true, y_prob))
 
 
 def pr_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -78,7 +86,7 @@ def pr_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     Returns:
         PR-AUC score between 0 and 1.
     """
-    pass
+    return float(average_precision_score(y_true, y_prob))
 
 
 def compute_all_metrics(
@@ -96,4 +104,13 @@ def compute_all_metrics(
     Returns:
         Dictionary containing all metric scores.
     """
-    pass
+    y_pred = (y_prob >= threshold).astype(int)
+
+    return {
+        "accuracy": accuracy(y_true, y_pred),
+        "precision": precision(y_true, y_pred),
+        "recall": recall(y_true, y_pred),
+        "f1": f1_score(y_true, y_pred),
+        "roc_auc": roc_auc(y_true, y_prob),
+        "pr_auc": pr_auc(y_true, y_prob),
+    }
