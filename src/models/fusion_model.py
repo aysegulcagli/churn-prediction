@@ -36,7 +36,19 @@ class FusionModel(nn.Module):
             dropout: Dropout probability for regularization.
         """
         super().__init__()
-        pass
+        self.time_series_encoder = time_series_encoder
+        self.text_encoder = text_encoder
+
+        ts_hidden_size = time_series_encoder.hidden_size
+        text_hidden_size = text_encoder.hidden_size
+        combined_size = ts_hidden_size + text_hidden_size
+
+        self.fusion = nn.Sequential(
+            nn.Linear(combined_size, fusion_hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(fusion_hidden_size, 1),
+        )
 
     def forward(
         self,
@@ -54,4 +66,10 @@ class FusionModel(nn.Module):
         Returns:
             Churn probability of shape (batch_size, 1).
         """
-        pass
+        ts_embedding = self.time_series_encoder(time_series)
+        text_embedding = self.text_encoder(input_ids, attention_mask)
+
+        combined = torch.cat([ts_embedding, text_embedding], dim=1)
+        logits = self.fusion(combined)
+
+        return logits
