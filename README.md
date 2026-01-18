@@ -1,60 +1,155 @@
 # Multi-Modal Churn Prediction
 
-A production-grade machine learning system for predicting customer churn by combining time series behavioral data with natural language signals from customer interactions.
+**Predicting customer churn by fusing behavioral time series and natural language signals — a production-grade deep learning system.**
 
-## Project Overview
+---
 
-This repository implements an end-to-end churn prediction pipeline that fuses two distinct data modalities:
+## Problem Statement
 
-- **Time Series Data**: Sequential user behavior patterns (login frequency, feature usage, session duration)
-- **Text Data**: Customer support tickets, feedback, and communication logs
+Customer churn costs businesses billions annually. Identifying at-risk customers before they leave enables proactive retention strategies that directly impact revenue.
 
-The system is designed with production readiness in mind, emphasizing modularity, testability, and clean engineering practices.
+Traditional churn models rely on a single data source — typically tabular features or aggregated statistics. This approach misses critical signals:
 
-## Modeling Approach
+- **Time series patterns**: Gradual disengagement (fewer logins, shorter sessions) often precedes churn, but aggregated metrics flatten these trends.
+- **Text signals**: Support tickets and feedback contain explicit frustration indicators that structured data cannot capture.
 
-### Time Series Encoder
+**This project solves both problems** by combining an LSTM-based time series encoder with a Transformer-based text encoder, fusing them into a unified prediction model. The result: a system that learns from *what users do* and *what users say*.
 
-An LSTM-based encoder processes variable-length behavioral sequences into fixed-size representations. The encoder captures temporal dependencies in user activity patterns that often precede churn events.
+---
 
-**Architecture**: Multi-layer LSTM with configurable hidden dimensions and dropout regularization. The final hidden state serves as the sequence representation.
-
-### Text Encoder
-
-A Transformer-based encoder (BERT) extracts semantic features from customer text data. The encoder uses the `[CLS]` token representation as a summary of the text content.
-
-**Architecture**: Pretrained BERT with configurable layer freezing for transfer learning efficiency.
-
-### Fusion Model
-
-A concatenation-based fusion layer combines the time series and text embeddings, followed by fully connected layers that output churn probability.
+## Solution Overview
 
 ```
-[Time Series Embedding] + [Text Embedding] → Linear → ReLU → Dropout → Linear → Logits
+┌─────────────────────────────────────────────────────────────────┐
+│                         INPUT DATA                              │
+├─────────────────────────────┬───────────────────────────────────┤
+│   Time Series (30 days)     │      Text (Support Tickets)       │
+│   [logins, sessions, ...]   │      "App keeps crashing..."      │
+└──────────────┬──────────────┴──────────────────┬────────────────┘
+               │                                  │
+               ▼                                  ▼
+┌──────────────────────────┐       ┌──────────────────────────────┐
+│   TimeSeriesEncoder      │       │       TextEncoder            │
+│   (Multi-layer LSTM)     │       │   (Pretrained BERT)          │
+│                          │       │                              │
+│   Input: (B, T, F)       │       │   Input: (B, seq_len)        │
+│   Output: (B, 128)       │       │   Output: (B, 768)           │
+└──────────────┬───────────┘       └──────────────┬───────────────┘
+               │                                  │
+               └──────────────┬───────────────────┘
+                              │
+                              ▼
+               ┌──────────────────────────────┐
+               │        FusionModel           │
+               │   Concat → Linear → ReLU     │
+               │   → Dropout → Linear         │
+               │                              │
+               │   Output: Churn Probability  │
+               └──────────────────────────────┘
 ```
+
+**Inputs:**
+- Time series: 30-day behavioral sequences (login counts, session duration, feature usage)
+- Text: Concatenated support tickets and feedback within the observation window
+
+**Output:**
+- Binary churn probability (0 = retained, 1 = churned)
+
+---
+
+## Architecture
+
+### Component Breakdown
+
+| Component | Responsibility | Key Design Choice |
+|-----------|---------------|-------------------|
+| `ChurnDataset` | Loads and aligns multi-modal data | Returns dict with `time_series`, `text`, `label` |
+| `TimeSeriesEncoder` | Encodes behavioral sequences | LSTM with last hidden state as output |
+| `TextEncoder` | Extracts semantic features | BERT with frozen lower layers |
+| `FusionModel` | Combines modalities, outputs prediction | Late fusion via concatenation |
+| `Trainer` | Orchestrates training loop | Separates train/val logic cleanly |
+| `metrics.py` | Computes evaluation metrics | Scikit-learn based, threshold-aware |
+
+---
+
+## Key Engineering Decisions
+
+### Why Modular Encoders?
+Each encoder is a standalone `nn.Module`. This enables:
+- Independent unit testing
+- Swapping architectures (e.g., GRU instead of LSTM) without touching fusion logic
+- Pretrained encoder reuse across projects
+
+### Why Late Fusion?
+Concatenating embeddings before the classifier (late fusion) is simple, interpretable, and empirically strong for multi-modal tasks. Early fusion would require careful feature alignment; late fusion lets each encoder learn its own representation.
+
+### Why Separate Training and Evaluation?
+The `Trainer` class handles only optimization. Metrics live in `evaluation/metrics.py`. This separation:
+- Keeps training code focused
+- Allows evaluation reuse in inference pipelines
+- Makes testing straightforward
+
+### Why Unit Tests + Smoke Tests?
+- **Unit tests** validate individual components in isolation (shape checks, edge cases)
+- **Smoke tests** verify the full pipeline runs end-to-end without crashing
+
+This layered approach catches bugs early and ensures integration works.
+
+---
+
+## Model Evaluation & Visual Reports
+
+### Metrics
+
+| Metric | Purpose |
+|--------|---------|
+| Accuracy | Overall correctness |
+| Precision | Avoid false alarms (predicted churn but stayed) |
+| Recall | Catch actual churners |
+| F1 Score | Balance precision and recall |
+| ROC-AUC | Ranking quality across thresholds |
+| PR-AUC | Performance on imbalanced data |
+
+### Visual Reports
+
+The following figures are generated by `scripts/plot_metrics.py`:
+
+#### Training Loss
+![Training Loss](docs/figures/train_loss.png)
+
+#### ROC Curve
+![ROC Curve](docs/figures/roc_curve.png)
+
+#### Precision-Recall Curve
+![Precision-Recall Curve](docs/figures/pr_curve.png)
+
+> **Note**: These plots use synthetic demonstration data. The high scores reflect the placeholder dataset, not real-world performance. In production, expect metrics aligned with your data distribution.
+
+---
 
 ## Project Structure
 
 ```
 churn-prediction/
 ├── configs/
-│   └── base.yaml              # Hyperparameters and configuration
+│   └── base.yaml              # All hyperparameters in one place
 ├── scripts/
-│   ├── train.py               # Training entry point
-│   └── evaluate.py            # Evaluation entry point
+│   ├── train.py               # CLI entry point for training
+│   ├── evaluate.py            # CLI entry point for evaluation
+│   └── plot_metrics.py        # Generate visual reports
 ├── src/
 │   ├── data/
-│   │   └── dataset.py         # PyTorch Dataset for multi-modal data
+│   │   └── dataset.py         # PyTorch Dataset implementation
 │   ├── models/
 │   │   ├── time_series_encoder.py
 │   │   ├── text_encoder.py
 │   │   └── fusion_model.py
 │   ├── training/
-│   │   └── trainer.py         # Training loop orchestration
+│   │   └── trainer.py         # Training loop abstraction
 │   ├── evaluation/
-│   │   └── metrics.py         # Evaluation metrics
+│   │   └── metrics.py         # Sklearn-based metrics
 │   └── utils/
-│       └── config.py          # Configuration loading
+│       └── config.py          # YAML config loader
 ├── tests/
 │   ├── test_dataset.py
 │   ├── test_time_series_encoder.py
@@ -62,85 +157,48 @@ churn-prediction/
 │   ├── test_fusion_model.py
 │   ├── test_training_loop.py
 │   └── test_metrics.py
-├── pyproject.toml
-└── CLAUDE.md
+├── docs/
+│   └── figures/               # Visual reports for README
+├── pyproject.toml             # Project metadata and dependencies
+└── CLAUDE.md                  # Development guidelines
 ```
 
-## Evaluation Metrics
+---
 
-The evaluation module provides standard classification metrics appropriate for imbalanced churn datasets:
+## How to Run
 
-| Metric | Description |
-|--------|-------------|
-| Accuracy | Overall classification correctness |
-| Precision | Proportion of predicted churners who actually churned |
-| Recall | Proportion of actual churners correctly identified |
-| F1 Score | Harmonic mean of precision and recall |
-| ROC-AUC | Area under the ROC curve |
-| PR-AUC | Area under the precision-recall curve |
-
-All metrics are implemented using scikit-learn with proper handling of edge cases.
-
-## Model Performance (Visual Report)
-
-The following figures summarize training dynamics and evaluation performance on the validation set.
-
-### Training Loss
-
-![Training Loss](docs/figures/train_loss.png)
-
-### ROC Curve
-
-![ROC Curve](docs/figures/roc_curve.png)
-
-### Precision-Recall Curve
-
-![Precision-Recall Curve](docs/figures/pr_curve.png)
-
-## Testing Strategy
-
-The project employs a multi-level testing approach:
-
-**Unit Tests**
-- Individual component validation (encoders, dataset, metrics)
-- Shape verification for tensor operations
-- Edge case handling (mismatched dimensions, empty inputs)
-
-**Integration Tests**
-- End-to-end training loop smoke tests
-- Gradient flow verification through the full model
-- Mock encoders for isolated testing without heavy dependencies
-
-**Test Execution**
 ```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run tests
 pytest tests/ -v
+
+# Generate visual reports
+python scripts/plot_metrics.py
 ```
 
-## Training Loop Overview
+---
 
-The `Trainer` class orchestrates the training process:
+## What This Project Demonstrates
 
-1. **Epoch Training**: Iterates over batches, computes forward pass, backpropagates gradients
-2. **Validation**: Evaluates on held-out data with gradients disabled
-3. **History Tracking**: Records train/validation loss for monitoring
+This repository is designed to showcase:
 
-The training loop is designed for extensibility, with placeholder methods for checkpointing and early stopping.
+- **End-to-end ML system design** — from data loading to evaluation
+- **Multi-modal deep learning** — fusing heterogeneous data sources
+- **Production code quality** — type hints, docstrings, modular architecture
+- **Testing discipline** — unit tests, integration tests, CI-ready structure
+- **Clean engineering** — configuration-driven, no hardcoded values, separation of concerns
 
-## Engineering Principles
+Built as a portfolio project to demonstrate applied ML engineering skills.
 
-This project adheres to production ML engineering standards:
-
-- **Type Hints**: Full type annotations on all functions and methods
-- **Docstrings**: Comprehensive documentation with Args, Returns, and Raises
-- **Modularity**: Each component is independently testable and replaceable
-- **Configuration-Driven**: All hyperparameters externalized to YAML configs
-- **No Magic Numbers**: Constants and parameters are explicitly named
-- **Clean Separation**: Data loading, model definition, training logic, and evaluation are decoupled
+---
 
 ## Future Work
 
-- Early stopping based on validation loss
-- Model checkpointing and resumption
-- Learning rate scheduling
-- Attention-based fusion mechanisms
-- Hyperparameter tuning integration
+- Early stopping and model checkpointing
+- Learning rate scheduling (cosine, warmup)
+- Attention-based fusion (cross-modal attention)
+- Hyperparameter tuning with Optuna
+- MLflow experiment tracking
+- Docker containerization for deployment
