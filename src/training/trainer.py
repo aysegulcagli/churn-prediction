@@ -56,14 +56,18 @@ class Trainer:
         num_batches = 0
 
         for batch in train_loader:
-            time_series = batch["time_series"].to(self.device)
-            input_ids = batch["input_ids"].to(self.device)
-            attention_mask = batch["attention_mask"].to(self.device)
             labels = batch["label"].float().to(self.device)
 
             self.optimizer.zero_grad()
 
-            logits = self.model(time_series, input_ids, attention_mask)
+            if "features" in batch:
+                features = batch["features"].to(self.device)
+                logits = self.model(features)
+            else:
+                time_series = batch["time_series"].to(self.device)
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                logits = self.model(time_series, input_ids, attention_mask)
             loss = self.criterion(logits.squeeze(-1), labels)
 
             loss.backward()
@@ -91,12 +95,16 @@ class Trainer:
 
         with torch.no_grad():
             for batch in val_loader:
-                time_series = batch["time_series"].to(self.device)
-                input_ids = batch["input_ids"].to(self.device)
-                attention_mask = batch["attention_mask"].to(self.device)
                 labels = batch["label"].float().to(self.device)
 
-                logits = self.model(time_series, input_ids, attention_mask)
+                if "features" in batch:
+                    features = batch["features"].to(self.device)
+                    logits = self.model(features)
+                else:
+                    time_series = batch["time_series"].to(self.device)
+                    input_ids = batch["input_ids"].to(self.device)
+                    attention_mask = batch["attention_mask"].to(self.device)
+                    logits = self.model(time_series, input_ids, attention_mask)
                 loss = self.criterion(logits.squeeze(-1), labels)
 
                 total_loss += loss.item()
