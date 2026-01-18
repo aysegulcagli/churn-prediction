@@ -81,6 +81,22 @@ The evaluation module provides standard classification metrics appropriate for i
 
 All metrics are implemented using scikit-learn with proper handling of edge cases.
 
+## Model Performance (Visual Report)
+
+The following figures summarize training dynamics and evaluation performance on the validation set.
+
+### Training Loss
+
+![Training Loss](artifacts/figures/train_loss.png)
+
+### ROC Curve
+
+![ROC Curve](artifacts/figures/roc_curve.png)
+
+### Precision-Recall Curve
+
+![Precision-Recall Curve](artifacts/figures/pr_curve.png)
+
 ## Testing Strategy
 
 The project employs a multi-level testing approach:
