@@ -1,0 +1,46 @@
+data:
+  raw_path: data/raw
+  processed_path: data/processed
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
+  random_seed: 42
+  sequence_length: 30
+  text_max_length: 256
+
+model:
+  time_series_encoder:
+    hidden_size: 128
+    num_layers: 2
+    dropout: 0.2
+  text_encoder:
+    pretrained_model: bert-base-uncased
+    freeze_layers: 10
+  fusion:
+    hidden_size: 256
+    dropout: 0.3
+  output_size: 1
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 50
+  early_stopping_patience: 5
+  optimizer: adam
+  weight_decay: 0.0001
+  scheduler: cosine
+  warmup_steps: 100
+  gradient_clip: 1.0
+  checkpoint_dir: artifacts/checkpoints
+
+evaluation:
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - auc_roc
+    - auc_pr
+  threshold: 0.5
+  prediction_horizon_days: 30
+  results_dir: artifacts/results
