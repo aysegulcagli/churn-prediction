@@ -36,7 +36,11 @@ class Trainer:
             device: Device for computation.
             config: Training configuration containing hyperparameters.
         """
-        pass
+        self.model = model.to(device)
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.device = device
+        self.config = config
 
     def train_epoch(self, train_loader: DataLoader) -> dict[str, float]:
         """Run one training epoch.
@@ -47,7 +51,30 @@ class Trainer:
         Returns:
             Dictionary containing training metrics (loss, accuracy, etc.).
         """
-        pass
+        self.model.train()
+        total_loss = 0.0
+        num_batches = 0
+
+        for batch in train_loader:
+            time_series = batch["time_series"].to(self.device)
+            input_ids = batch["input_ids"].to(self.device)
+            attention_mask = batch["attention_mask"].to(self.device)
+            labels = batch["label"].float().to(self.device)
+
+            self.optimizer.zero_grad()
+
+            logits = self.model(time_series, input_ids, attention_mask)
+            loss = self.criterion(logits.squeeze(-1), labels)
+
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item()
+            num_batches += 1
+
+        avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+
+        return {"loss": avg_loss}
 
     def validate(self, val_loader: DataLoader) -> dict[str, float]:
         """Run validation.
@@ -58,7 +85,26 @@ class Trainer:
         Returns:
             Dictionary containing validation metrics.
         """
-        pass
+        self.model.eval()
+        total_loss = 0.0
+        num_batches = 0
+
+        with torch.no_grad():
+            for batch in val_loader:
+                time_series = batch["time_series"].to(self.device)
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                labels = batch["label"].float().to(self.device)
+
+                logits = self.model(time_series, input_ids, attention_mask)
+                loss = self.criterion(logits.squeeze(-1), labels)
+
+                total_loss += loss.item()
+                num_batches += 1
+
+        avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+
+        return {"loss": avg_loss}
 
     def fit(
         self,
@@ -76,7 +122,19 @@ class Trainer:
         Returns:
             Dictionary containing training history.
         """
-        pass
+        history: dict[str, list[float]] = {
+            "train_loss": [],
+            "val_loss": [],
+        }
+
+        for epoch in range(epochs):
+            train_metrics = self.train_epoch(train_loader)
+            val_metrics = self.validate(val_loader)
+
+            history["train_loss"].append(train_metrics["loss"])
+            history["val_loss"].append(val_metrics["loss"])
+
+        return history
 
     def save_checkpoint(self, path: str, epoch: int) -> None:
         """Save model checkpoint.
