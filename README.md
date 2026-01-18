@@ -87,15 +87,15 @@ The following figures summarize training dynamics and evaluation performance on 
 
 ### Training Loss
 
-![Training Loss](artifacts/figures/train_loss.png)
+![Training Loss](docs/figures/train_loss.png)
 
 ### ROC Curve
 
-![ROC Curve](artifacts/figures/roc_curve.png)
+![ROC Curve](docs/figures/roc_curve.png)
 
 ### Precision-Recall Curve
 
-![Precision-Recall Curve](artifacts/figures/pr_curve.png)
+![Precision-Recall Curve](docs/figures/pr_curve.png)
 
 ## Testing Strategy
 
