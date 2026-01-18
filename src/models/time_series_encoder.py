@@ -31,7 +31,16 @@ class TimeSeriesEncoder(nn.Module):
             dropout: Dropout probability for regularization.
         """
         super().__init__()
-        pass
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Encode time series input.
@@ -42,4 +51,5 @@ class TimeSeriesEncoder(nn.Module):
         Returns:
             Encoded representation of shape (batch_size, hidden_size).
         """
-        pass
+        _, (h_n, _) = self.lstm(x)
+        return h_n[-1]
