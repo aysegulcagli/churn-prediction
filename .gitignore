@@ -1,6 +1,6 @@
 # Data and artifacts
-data/
-artifacts/
+/data/
+/artifacts/
 *.csv
 *.parquet
 *.pkl
