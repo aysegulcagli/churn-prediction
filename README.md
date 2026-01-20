@@ -74,12 +74,21 @@ This project includes multiple model variants to evaluate the contribution of ea
 
 | Model                    | ROC-AUC | PR-AUC | F1 (t=0.5) | F1 (optimized) |
 |--------------------------|---------|--------|------------|----------------|
-| Tabular Baseline         | —       | —      | —          | —              |
-| Time-Series-Only (LSTM)  | ~0.60   | ~0.31  | ~0.00      | ~0.41*         |
+| Tabular Baseline         | 0.495   | 0.238  | 0.254      | 0.317*         |
+| Time-Series-Only (LSTM)  | ~0.60   | ~0.31  | ~0.00      | ~0.41**        |
 
-\* Optimized threshold ≈ 0.25 (selected on validation set)
+\* Tabular Baseline optimized at threshold = 0.05
+\*\* Time-Series-Only (LSTM) optimized at threshold ≈ 0.25
 
-> **Note**: The tabular baseline was successfully trained and validated. Due to differences in dataset representation and caching between aggregated and sequential inputs, only qualitative comparison is reported for the baseline in this iteration.
+The tabular baseline performs near random (ROC-AUC ≈ 0.5) because aggregated features lose the temporal dynamics that distinguish churners from retained users; the LSTM's ability to model sequential behavior accounts for its improved ranking performance.
+
+#### Validation Curves (Tabular Baseline)
+
+![ROC and PR Curves](figures/tabular_roc_pr_val.png)
+*ROC and Precision–Recall curves on the validation set for the tabular baseline.*
+
+![Threshold vs F1](figures/tabular_threshold_f1_val.png)
+*F1 score as a function of decision threshold on the validation set. The optimal threshold is selected to maximize F1.*
 
 #### Interpreting the Metrics
 
