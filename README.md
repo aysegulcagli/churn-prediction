@@ -1,269 +1,145 @@
+# Churn Prediction with Large-Scale Behavioral Time Series
 
-# Multi-Modal Churn Prediction
-
-**Predicting customer churn by fusing behavioral time series and natural language signals — a production-grade deep learning system.**
+**A production-oriented churn prediction system built on large-scale user behavior logs, focusing on memory-efficient data processing, temporal modeling, and honest model evaluation.**
 
 ---
 
 ## Problem Statement
 
-Customer churn costs businesses billions annually. Identifying at-risk customers before they leave enables proactive retention strategies that directly impact revenue.
+Customer churn prediction aims to identify users who are likely to stop using a service in the near future. Early identification of at-risk users enables proactive retention strategies and has direct business impact.
 
-Traditional churn models rely on a single data source — typically tabular features or aggregated statistics. This approach misses critical signals:
+Many churn models rely solely on aggregated tabular features, which often miss **temporal disengagement patterns**, such as gradual decreases in activity or sudden drops in usage. These patterns are particularly important in subscription-based products.
 
-- **Time series patterns**: Gradual disengagement (fewer logins, shorter sessions) often precedes churn, but aggregated metrics flatten these trends.
-- **Text signals**: Support tickets and feedback contain explicit frustration indicators that structured data cannot capture.
-
-**This project solves both problems** by combining an LSTM-based time series encoder with a Transformer-based text encoder, fusing them into a unified prediction model. The result: a system that learns from *what users do* and *what users say*.
+This project investigates:
+- Whether simple aggregated (tabular) features are sufficient for churn prediction
+- Whether **temporal modeling with time series data** provides meaningful gains
+- How evaluation choices (splitting, metrics, thresholds) affect conclusions under heavy class imbalance
 
 ---
 
 ## Solution Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         INPUT DATA                              │
-├─────────────────────────────┬───────────────────────────────────┤
-│   Time Series (30 days)     │      Text (Support Tickets)       │
-│   [logins, sessions, ...]   │      "App keeps crashing..."      │
-└──────────────┬──────────────┴──────────────────┬────────────────┘
-               │                                  │
-               ▼                                  ▼
-┌──────────────────────────┐       ┌──────────────────────────────┐
-│   TimeSeriesEncoder      │       │       TextEncoder            │
-│   (Multi-layer LSTM)     │       │   (Pretrained BERT)          │
-│                          │       │                              │
-│   Input: (B, T, F)       │       │   Input: (B, seq_len)        │
-│   Output: (B, 128)       │       │   Output: (B, 768)           │
-└──────────────┬───────────┘       └──────────────┬───────────────┘
-               │                                  │
-               └──────────────┬───────────────────┘
-                              │
-                              ▼
-               ┌──────────────────────────────┐
-               │        FusionModel           │
-               │   Concat → Linear → ReLU     │
-               │   → Dropout → Linear         │
-               │                              │
-               │   Output: Churn Probability  │
-               └──────────────────────────────┘
-```
+The system is designed as an **end-to-end churn prediction pipeline**, covering data ingestion, preprocessing, model training, evaluation, and visualization.
+
+At its core, the project compares two modeling approaches:
+
+1. **Tabular Baseline**
+   - Aggregated statistics over a 30-day observation window
+   - Simple, interpretable reference model
+
+2. **Time-Series-Only Model (LSTM)**
+   - Sequential modeling of daily user behavior
+   - Captures temporal dynamics lost in aggregation
+
+The codebase also contains architecture-ready components for text modeling and multi-modal fusion, but **no text data is available in the KKBOX dataset**, so these models are not evaluated in this iteration.
 
 ---
 
-## Model Comparison & Ablation Study
+## Model Variants
 
-This project includes multiple model variants to evaluate the contribution of each data modality and modeling assumption.
-
-| Model | Uses Time Series | Uses Text | Purpose |
-|------|------------------|-----------|---------|
-| Tabular Baseline | Aggregated | No | Performance floor |
-| Time-Series-Only | Sequential | No | Measure temporal signal |
-| Fusion Model | Sequential | Yes | Full multi-modal model |
-
-### Results & Comparison
-
-#### Experimental Setup
-- **Dataset**: KKBOX music streaming service (~30GB user logs, ~392M rows)
-- **Observation window**: 30 days of user activity
-- **Evaluation split**: Validation set only (time-based split)
-- **Primary metric**: ROC-AUC (ranking ability)
-- **Secondary metrics**: PR-AUC, F1 score
-
-#### Model Performance
-
-| Model                    | ROC-AUC | PR-AUC | F1 (t=0.5) | F1 (optimized) |
-|--------------------------|---------|--------|------------|----------------|
-| Tabular Baseline         | 0.495   | 0.238  | 0.254      | 0.317*         |
-| Time-Series-Only (LSTM)  | ~0.60   | ~0.31  | ~0.00      | ~0.41**        |
-
-\* Tabular Baseline optimized at threshold = 0.05
-\*\* Time-Series-Only (LSTM) optimized at threshold ≈ 0.25
-
-The tabular baseline performs near random (ROC-AUC ≈ 0.5) because aggregated features lose the temporal dynamics that distinguish churners from retained users; the LSTM's ability to model sequential behavior accounts for its improved ranking performance.
-
-#### Validation Curves (Tabular Baseline)
-
-![ROC and PR Curves](figures/tabular_roc_pr_val.png)
-*ROC and Precision–Recall curves on the validation set for the tabular baseline.*
-
-![Threshold vs F1](figures/tabular_threshold_f1_val.png)
-*F1 score as a function of decision threshold on the validation set. The optimal threshold is selected to maximize F1.*
-
-#### Interpreting the Metrics
-
-**Why F1 at the default threshold (0.5) is near zero**
-
-Churn prediction is a highly imbalanced problem where the majority of users do not churn. Using a default threshold of 0.5 assumes balanced classes and therefore results in almost no positive predictions. This behavior is expected and does not indicate a model failure.
-
-**Why ROC-AUC and PR-AUC are more informative**
-
-In practical churn prediction systems, the primary goal is to rank users by churn risk rather than make perfectly calibrated binary predictions. ROC-AUC measures ranking quality independent of threshold choice, while PR-AUC focuses on performance for the minority (churn) class and is especially relevant under class imbalance.
-
-**Threshold selection in practice**
-
-The optimal decision threshold depends on business constraints:
-- Lower threshold → higher recall, more false positives
-- Higher threshold → higher precision, more missed churners
-
-For this dataset, a threshold around 0.25 provides a reasonable balance between precision and recall.
-
-#### Key Observations
-
-1. **Class imbalance dominates evaluation**: Standard metrics like accuracy and F1@0.5 are misleading; threshold-independent metrics (AUC) provide a clearer picture
-2. **Temporal modeling shows moderate gains**: The LSTM captures sequential patterns but benefits are incremental over aggregated features
-3. **Practical value is in ranking**: The model successfully differentiates high-risk from low-risk users, enabling targeted retention campaigns
-4. **Infrastructure challenges**: Processing 392M rows required memory-efficient chunked I/O and caching strategies
+| Model | Input Representation | Uses Text | Purpose |
+|------|----------------------|-----------|---------|
+| Tabular Baseline | Aggregated (7 features) | No | Performance floor |
+| Time-Series-Only | Sequential (30 × 6) | No | Measure temporal signal |
+| Fusion Model | Sequential + Text | Yes (future) | Architecture-ready, not evaluated |
 
 ---
 
-## Design Decisions & Trade-offs
+## Dataset
 
-### Why Multiple Baselines?
+- **Source**: KKBOX music streaming service
+- **Raw size**: ~30GB
+- **Rows**: ~392 million user activity logs
+- **Labels**: Binary churn indicator per user
+- **Observation window**: Last 30 days of activity
+- **Split strategy**: Time-based (no random sampling)
 
-Complex models are only valuable if they outperform simpler alternatives. This project includes three model variants—not to inflate the repository, but to enable honest evaluation.
-
-- **Tabular Baseline** answers: “Do we even need deep learning?”
-- **Time-Series-Only** answers: “Does temporal modeling justify the added complexity?”
-- **Fusion Model** answers: “Does text provide signal beyond behavioral data?”
-
-Without baselines, a reported ROC-AUC lacks context.
-
-> Understanding **why** a model works matters more than simply proving that it works.
+Time-based splitting is critical to prevent **data leakage**, as training on future behavior to predict past churn would invalidate results.
 
 ---
 
-### Why Ablation Over Benchmark Chasing?
-
-Rather than reporting a single best-performing model, this project prioritizes ablation to understand the contribution of each component.
-
-If the Fusion model only marginally outperforms the Time-Series-Only variant, the additional complexity of text modeling may not be justified in production. If a simple tabular baseline performs competitively, the entire modeling approach deserves reconsideration.
-
----
-
-### Why a Unified Training Interface?
-
-All model variants share the same Dataset, Trainer, and evaluation pipeline. This was a deliberate engineering decision:
-
-1. **Consistency** – Differences in results reflect model architecture, not pipeline variance.
-2. **Maintainability** – New baselines require only a model file, not a parallel infrastructure.
-3. **Realism** – Production systems rarely maintain separate pipelines per model variant.
-
----
-
-### Why Model Text Separately?
-
-Instead of manual text feature engineering, this project uses a learned text encoder.
-
-This allows:
-- Richer semantic representations
-- Task-specific feature learning
-- Modular upgrades without pipeline changes
-
----
-
-### Why No Results Yet?
-
-Reporting metrics without real data is misleading. Placeholder plots demonstrate the evaluation pipeline—not real-world performance.
-
-When real data becomes available, this repository supports rigorous experimentation and reproducible results without architectural changes.
-
----
-
-## Engineering Challenges & Lessons Learned
+## Engineering Challenges
 
 ### Memory-Efficient Data Processing
-Processing ~392 million rows on a single machine required careful engineering. A naive `pd.read_csv()` approach would quickly exhaust available memory. The solution was a two-pass, chunked processing pipeline: the first pass computes per-user metadata, while the second pass extracts windowed sequences. This design intentionally trades runtime for memory safety, enabling large-scale local experimentation.
 
-### Caching Strategy and Its Pitfalls
-To avoid reprocessing the 30GB dataset on every run, processed tensors are cached to disk. An early cache design used only the dataset split name as the cache key, ignoring the data representation mode. Switching between aggregated (tabular) and sequential (time-series) inputs led to stale caches and runtime shape mismatches. The key lesson: cache keys must encode all parameters that affect data shape or semantics.
+The dataset is too large to load into memory at once. A naive `pd.read_csv()` approach is infeasible.
 
-### Time-Based Data Splitting
-Churn prediction requires strict temporal integrity—training on future data to predict past churn would introduce leakage. Instead of random splits, datasets are constructed based on observation window end dates. While this added complexity to the pipeline, it ensures realistic and trustworthy evaluation.
+**Solution**: Two-pass chunked processing
+- **Pass 1**: Compute per-user metadata (window boundaries, activity span)
+- **Pass 2**: Collect windowed logs for each user
 
-### Class Imbalance and Metric Selection
-With a low base churn rate, accuracy and F1 at default thresholds are misleading. The model achieved near-zero F1 at a threshold of 0.5 not due to poor learning, but because the threshold assumes balanced classes. This reinforced the importance of ranking-based metrics (ROC-AUC, PR-AUC) and explicit threshold tuning based on business constraints.
+This design trades runtime for memory safety and enables large-scale local experimentation.
 
-### Numerical Stability in Feature Engineering
-Raw behavioral logs contained extreme values that propagated NaNs through log transformations and model gradients. Defensive preprocessing—clipping, `log1p`, and explicit NaN handling—was essential for maintaining numerical stability during training.
+---
 
-### Progress Visibility for Long-Running Jobs
-Processing 79 chunks across two passes takes over 40 minutes. Without progress indicators, distinguishing between "working" and "stuck" is impossible. Adding progress bars and periodic logging transformed debugging from guesswork into informed monitoring.
+### Caching Strategy
+
+Processed datasets are cached to disk as PyTorch tensors to avoid reprocessing the 30GB CSV on every run.
+
+A key lesson learned:
+> Cache keys must encode **all parameters that affect data shape or semantics**.
+
+Early cache designs caused shape mismatches when switching between aggregated and sequential representations, highlighting a common pitfall in ML pipelines.
+
+---
+
+## Evaluation Setup
+
+- **Evaluation split**: Validation set only
+- **Primary metric**: ROC-AUC (ranking ability)
+- **Secondary metrics**: PR-AUC, F1 score
+- **Loss**: Binary Cross-Entropy with logits
+- **Threshold tuning**: Explicitly performed due to class imbalance
+
+Accuracy and F1 at default thresholds are misleading in churn prediction, where the positive class is rare.
+
+---
+
+## Results & Comparison
+
+### Model Performance (Validation Set)
+
+| Model | ROC-AUC | PR-AUC | F1 (t=0.5) | F1 (optimized) |
+|------|--------|--------|------------|----------------|
+| Tabular Baseline | 0.495 | 0.238 | 0.254 | 0.317* |
+| Time-Series-Only (LSTM) | ~0.60 | ~0.31 | ~0.00 | ~0.41** |
+
+\* Tabular Baseline optimized at threshold = 0.05
+\*\* Time-Series-Only optimized at threshold ≈ 0.25
+
+### Interpretation
+
+- The **tabular baseline performs near random**, indicating that aggregated features lose critical temporal information.
+- The **LSTM model achieves better ranking performance**, demonstrating the value of modeling sequential behavior.
+- Near-zero F1 at threshold 0.5 (especially for the LSTM) is expected due to severe class imbalance and does not indicate model failure.
+
+---
+
+### Validation Curves (Tabular Baseline)
+
+![ROC and PR Curves](figures/tabular_roc_pr_val.png)
+*ROC and Precision–Recall curves on the validation set.*
+
+![Threshold vs F1](figures/tabular_threshold_f1_val.png)
+*F1 score as a function of decision threshold. Optimal threshold selected to maximize F1.*
+
+---
+
+## Key Observations
+
+1. **Class imbalance dominates evaluation**
+   Threshold-independent metrics (ROC-AUC, PR-AUC) are more informative than accuracy or F1@0.5.
+
+2. **Temporal modeling matters**
+   Sequential models capture disengagement patterns that aggregated features cannot.
+
+3. **Churn is a ranking problem**
+   The practical value lies in ordering users by risk, not binary decisions at arbitrary thresholds.
+
+4. **Engineering choices shape outcomes**
+   Data splitting, caching, and preprocessing decisions materially affect conclusions.
 
 ---
 
 ## Project Structure
 
-```
-churn-prediction/
-├── configs/
-│   └── base.yaml              # All hyperparameters in one place
-├── scripts/
-│   ├── train.py               # CLI entry point for training
-│   ├── evaluate.py            # CLI entry point for evaluation
-│   └── plot_metrics.py        # Generate visual reports
-├── src/
-│   ├── data/
-│   │   └── dataset.py         # PyTorch Dataset implementation
-│   ├── models/
-│   │   ├── time_series_encoder.py
-│   │   ├── text_encoder.py
-│   │   └── fusion_model.py
-│   ├── training/
-│   │   └── trainer.py         # Training loop abstraction
-│   ├── evaluation/
-│   │   └── metrics.py         # Sklearn-based metrics
-│   └── utils/
-│       └── config.py          # YAML config loader
-├── tests/
-│   ├── test_dataset.py
-│   ├── test_time_series_encoder.py
-│   ├── test_text_encoder.py
-│   ├── test_fusion_model.py
-│   ├── test_training_loop.py
-│   └── test_metrics.py
-├── docs/
-│   └── figures/               # Visual reports for README
-├── pyproject.toml             # Project metadata and dependencies
-└── CLAUDE.md                  # Development guidelines
-```
-
----
-
-## How to Run
-
-```bash
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/ -v
-
-# Generate visual reports
-python scripts/plot_metrics.py
-```
-
----
-
-## What This Project Demonstrates
-
-This repository is designed to showcase:
-
-- **End-to-end ML system design** — from data loading to evaluation
-- **Multi-modal deep learning** — fusing heterogeneous data sources
-- **Production code quality** — type hints, docstrings, modular architecture
-- **Testing discipline** — unit tests, integration tests, CI-ready structure
-- **Clean engineering** — configuration-driven, no hardcoded values, separation of concerns
-
-Built as a portfolio project to demonstrate applied ML engineering skills.
-
----
-
-## Future Work
-
-- Early stopping and model checkpointing
-- Learning rate scheduling (cosine, warmup)
-- Attention-based fusion (cross-modal attention)
-- Hyperparameter tuning with Optuna
-- MLflow experiment tracking
-- Docker containerization for deployment
